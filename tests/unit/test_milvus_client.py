@@ -1327,6 +1327,25 @@ class TestMilvusClientSearchOps:
         mock_v1.assert_called_once()
         assert mock_v1.call_args.kwargs["ann_field"] == "vector"
 
+    def test_search_iterator_v1_reads_metric_from_index_on_anns_field(self):
+        index = milvus_pb2.IndexDescription(
+            index_name="vector_idx",
+            field_name="vector",
+            params=[common_pb2.KeyValuePair(key="metric_type", value="IP")],
+        )
+        handler = _make_handler()
+        handler._get_schema.return_value = ({"fields": []}, 100)
+        handler.list_indexes.return_value = [index]
+        with patch("pymilvus.client.grpc_handler.GrpcHandler", return_value=handler):
+            client = MilvusClient()
+            with patch(
+                "pymilvus.milvus_client.milvus_client.SearchIteratorV2",
+                side_effect=ServerVersionIncompatibleException(message="fallback"),
+            ), patch("pymilvus.milvus_client.milvus_client.SearchIterator") as mock_v1:
+                client.search_iterator("col", data=[[0.1, 0.2]], anns_field="vector")
+
+        assert mock_v1.call_args.kwargs["param"]["metric_type"] == "IP"
+
 
 class TestMilvusClientSession:
     @pytest.mark.parametrize(
